@@ -1,0 +1,17 @@
+# Бинарники
+audio-labeler
+*.exe
+
+# Go
+go.sum
+
+# IDE
+.idea/
+.vscode/
+
+# Логи
+*.log
+
+# Конфиги с паролями
+.env
+config.yaml
