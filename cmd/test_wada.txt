@@ -1,0 +1,22 @@
+package main
+
+import (
+	"audio-labeler/internal/audio"
+	"fmt"
+)
+
+func main() {
+	path := "/data/naile1/second_dataset_without_num/corpus/LibriSpeech/train/1000001/20000003/1000001-20000003-0000.wav"
+
+	snr, err := audio.WADASNR(path)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	fmt.Printf("WADA SNR: %.1f dB\n", snr)
+
+	stats, _ := audio.GetStats(path)
+	fmt.Printf("Sox SNR:  %.1f dB\n", stats.SNRSox)
+	fmt.Printf("Combined: %.1f dB\n", stats.SNREstimate)
+	fmt.Printf("Noise:    %s\n", stats.NoiseLevel)
+}

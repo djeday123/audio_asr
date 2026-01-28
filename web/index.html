@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Labeler</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/style/segment.css">
+    <style>
+        .diff-error {
+            background-color: #fee2e2;
+            color: #dc2626;
+        }
+
+        .diff-ok {
+            background-color: #dcfce7;
+        }
+
+        audio {
+            width: 100%;
+            height: 32px;
+        }
+
+        .loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        /* Новые стили для верификации */
+        .card-verified {
+            border-left: 4px solid #22c55e;
+            background: linear-gradient(90deg, rgba(34, 197, 94, 0.1) 0%, transparent 10%);
+        }
+
+        .card-needs-review {
+            border-left: 4px solid #ef4444;
+            background: linear-gradient(90deg, rgba(239, 68, 68, 0.1) 0%, transparent 10%);
+        }
+
+        .card-high-wer {
+            border-left: 4px solid #f97316;
+            background: linear-gradient(90deg, rgba(249, 115, 22, 0.1) 0%, transparent 10%);
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+    <div class="mx-auto px-4 py-6" style="max-width: 1800px;">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-4 mb-4">
+            <h1 class="text-2xl font-bold text-gray-800 mb-3">🎙️ Audio Labeler</h1>
+
+            <!-- Stats - с группировкой -->
+            <div id="stats" class="mb-3 text-sm">
+                <!-- Первый ряд - основные метрики -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                    <div class="bg-blue-50 p-2 rounded">
+                        <div class="text-xs text-gray-600">Total</div>
+                        <div class="text-lg font-bold text-blue-600" id="stat-total">-</div>
+                    </div>
+                    <div class="bg-emerald-50 p-2 rounded">
+                        <div class="text-xs text-gray-600">Verified ✓</div>
+                        <div class="text-lg font-bold text-emerald-600" id="stat-verified">-</div>
+                    </div>
+                    <div class="bg-red-50 p-2 rounded">
+                        <div class="text-xs text-gray-600">Needs Review</div>
+                        <div class="text-lg font-bold text-red-600" id="stat-needs-review">-</div>
+                    </div>
+                    <div class="bg-teal-50 p-2 rounded">
+                        <div class="text-xs text-gray-600">Speakers</div>
+                        <div class="text-lg font-bold text-teal-600" id="stat-speakers">-</div>
+                    </div>
+                </div>
+
+                <!-- Второй ряд - Pending и WER группы -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <!-- Pending группа -->
+                    <div class="bg-yellow-50 p-2 rounded">
+                        <div class="text-xs text-gray-600 font-semibold mb-1">⏳ Pending</div>
+                        <div class="grid grid-cols-4 gap-1 text-center">
+                            <div>
+                                <div class="text-xs text-gray-500">Kaldi</div>
+                                <div class="font-bold text-yellow-700" id="stat-pending">-</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">NoLM</div>
+                                <div class="font-bold text-yellow-700" id="stat-pending-nolm">-</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">W.Local</div>
+                                <div class="font-bold text-yellow-700" id="stat-pending-whisper-local">-</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">W.OpenAI</div>
+                                <div class="font-bold text-yellow-700" id="stat-pending-whisper-openai">-</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- WER группа -->
+                    <div class="bg-gray-50 p-2 rounded">
+                        <div class="text-xs text-gray-600 font-semibold mb-1">📊 Avg WER / Processed</div>
+                        <div class="grid grid-cols-4 gap-1 text-center">
+                            <div>
+                                <div class="text-xs text-gray-500">Kaldi</div>
+                                <div class="font-bold text-blue-600" id="stat-kaldi-wer">-</div>
+                                <div class="text-xs text-gray-400" id="stat-kaldi-processed">0</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">NoLM</div>
+                                <div class="font-bold text-indigo-600" id="stat-kaldi-nolm-wer">-</div>
+                                <div class="text-xs text-gray-400" id="stat-nolm-processed">0</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">W.Local</div>
+                                <div class="font-bold text-green-600" id="stat-whisper-local-wer">-</div>
+                                <div class="text-xs text-gray-400" id="stat-wlocal-processed">0</div>
+                            </div>
+                            <div>
+                                <div class="text-xs text-gray-500">W.OpenAI</div>
+                                <div class="font-bold text-purple-600" id="stat-whisper-openai-wer">-</div>
+                                <div class="text-xs text-gray-400" id="stat-wopenai-processed">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Processing Controls - добавлен Kaldi NoLM -->
+            <div class="bg-gray-50 rounded p-3 mb-3">
+                <div class="flex flex-wrap gap-3 items-center text-sm">
+                    <span class="font-semibold text-gray-700">Process:</span>
+
+                    <div class="flex items-center gap-1">
+                        <input type="number" id="process-limit" value="100" min="1" max="10000"
+                            class="border rounded px-2 py-1 w-20">
+                        <span class="text-gray-500">files</span>
+                    </div>
+
+                    <select id="process-target" class="border rounded px-2 py-1">
+                        <option value="kaldi">Kaldi ASR</option>
+                        <option value="kaldi-nolm">Kaldi NoLM</option>
+                        <option value="whisper-local">Whisper Local</option>
+                        <option value="whisper-openai">Whisper OpenAI</option>
+                        <option value="whisper-openai-forced">Whisper OpenAI (forced)</option>
+                        <option value="analyze">📊 Analyze SNR</option>
+                    </select>
+
+                    <label class="flex items-center gap-1 text-sm">
+                        <input type="checkbox" id="analyze-force"> Force re-analyze
+                    </label>
+                    <button onclick="startProcessing()"
+                        class="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600">
+                        ▶ Start
+                    </button>
+                    <button onclick="stopProcessing()" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+                        ⏹ Stop
+                    </button>
+                    <button onclick="recalcAll()"
+                        class="bg-orange-500 text-white px-3 py-1 rounded hover:bg-orange-600">
+                        🔄 Recalc All
+                    </button>
+                    <button onclick="refreshStatus()"
+                        class="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500">
+                        ↻ Status
+                    </button>
+
+                    <div id="process-status" class="text-xs text-gray-600 ml-2"></div>
+                </div>
+            </div>
+
+            <!-- Filters - добавлен фильтр Verified -->
+            <div class="flex flex-wrap gap-3 items-center text-sm mb-2">
+                <div>
+                    <label class="text-gray-600">Per page:</label>
+                    <select id="limit" class="ml-1 border rounded px-2 py-1">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                        <option value="250">250</option>
+                        <option value="500">500</option>
+                        <option value="1000">1000</option>
+                        <option value="2000">2000</option>
+                        <option value="5000">5000</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-gray-600">Verified:</label>
+                    <select id="filter-verified" class="ml-1 border rounded px-2 py-1">
+                        <option value="">All</option>
+                        <option value="yes">Yes ✓</option>
+                        <option value="no">No</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-gray-600">Dataset:</label>
+                    <select id="filter-merged" class="ml-1 border rounded px-2 py-1">
+                        <option value="final" selected>Final (ready)</option>
+                        <option value="all">All files</option>
+                        <option value="merged">Merged results</option>
+                        <option value="sources">Merged sources</option>
+                        <option value="never">Never merged</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-gray-600">Active:</label>
+                    <select id="filter-active" class="ml-1 border rounded px-2 py-1">
+                        <option value="yes" selected>Active only</option>
+                        <option value="all">All</option>
+                        <option value="no">Inactive only</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-gray-600">Status:</label>
+                    <select id="filter" class="ml-1 border rounded px-2 py-1">
+                        <option value="all">All</option>
+                        <option value="errors">With Errors (WER > 0)</option>
+                        <option value="high_wer">High WER (> 10%)</option>
+                        <option value="very_high_wer">Very High WER (> 20%)</option>
+                        <option value="pending_asr">Pending Kaldi</option>
+                        <option value="pending_nolm">Pending NoLM</option>
+                        <option value="pending_whisper">Pending Whisper Local</option>
+                        <option value="pending_openai">Pending OpenAI</option>
+                        <option value="processed_asr">Processed Kaldi</option>
+                        <option value="processed_nolm">Processed NoLM</option>
+                        <option value="processed_whisper">Processed Whisper Local</option>
+                        <option value="processed_openai">Processed OpenAI</option>
+                    </select>
+                </div>
+
+                <button onclick="loadFiles()" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">
+                    Refresh
+                </button>
+                <button onclick="resetFilters()" class="bg-gray-300 text-gray-700 px-3 py-1 rounded hover:bg-gray-400">
+                    Reset
+                </button>
+            </div>
+
+            <!-- Filters - Row 2 -->
+            <div class="flex flex-wrap gap-3 items-center text-sm">
+                <div>
+                    <label class="text-gray-600">ID:</label>
+                    <input type="text" id="filter-id" placeholder="File ID" class="ml-1 border rounded px-2 py-1 w-20"
+                        onkeypress="if(event.key==='Enter')searchById()">
+                    <button onclick="searchById()" class="bg-gray-300 px-2 py-1 rounded hover:bg-gray-400">🔍</button>
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <label class="text-gray-600">Duration:</label>
+                    <select id="dur-op" class="border rounded px-1 py-1">
+                        <option value="">-</option>
+                        <option value="lt">&lt;</option>
+                        <option value="gt">&gt;</option>
+                    </select>
+                    <input type="number" id="dur-value" step="0.1" min="0" placeholder="sec"
+                        class="border rounded px-2 py-1 w-16">
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <label class="text-gray-600">WER:</label>
+                    <select id="wer-op" class="border rounded px-1 py-1">
+                        <option value="">-</option>
+                        <option value="lt">&lt;</option>
+                        <option value="gt">&gt;</option>
+                        <option value="eq">=</option>
+                    </select>
+                    <input type="number" id="wer-value" step="0.1" min="0" max="100" placeholder="%"
+                        class="border rounded px-2 py-1 w-16">
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <label class="text-gray-600">WER NoLM:</label>
+                    <select id="wer-nolm-op" class="border rounded px-1 py-1">
+                        <option value="">-</option>
+                        <option value="lt">&lt;</option>
+                        <option value="gt">&gt;</option>
+                    </select>
+                    <input type="number" id="wer-nolm-value" step="0.1" min="0" max="100" placeholder="%"
+                        class="border rounded px-2 py-1 w-16">
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <label class="text-gray-600">WER W.L:</label>
+                    <select id="wer-wl-op" class="border rounded px-1 py-1">
+                        <option value="">-</option>
+                        <option value="lt">&lt;</option>
+                        <option value="gt">&gt;</option>
+                    </select>
+                    <input type="number" id="wer-wl-value" step="0.1" min="0" max="100" placeholder="%"
+                        class="border rounded px-2 py-1 w-16">
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <label class="text-gray-600">SNR:</label>
+                    <select id="snr-op" class="border rounded px-1 py-1">
+                        <option value="">-</option>
+                        <option value="lt">&lt;</option>
+                        <option value="gt">&gt;</option>
+                    </select>
+                    <input type="number" id="snr-value" step="1" min="0" placeholder="dB"
+                        class="border rounded px-2 py-1 w-16">
+                </div>
+
+                <div>
+                    <label class="text-gray-600">Noise:</label>
+                    <select id="filter-noise" class="ml-1 border rounded px-2 py-1">
+                        <option value="">All</option>
+                        <option value="low">🟢 Low</option>
+                        <option value="medium">🟡 Medium</option>
+                        <option value="high">🟠 High</option>
+                        <option value="very_high">🔴 Very High</option>
+                        <option value="none">⚪ Not analyzed</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <label class="text-gray-600">Text:</label>
+                    <input type="text" id="filter-text" placeholder="Search..." class="border rounded px-2 py-1 w-24"
+                        onkeypress="if(event.key==='Enter')loadFiles()">
+                </div>
+
+                <div class="relative">
+                    <label class="text-gray-600">Speaker:</label>
+                    <input type="text" id="speaker-search" placeholder="All speakers"
+                        class="ml-1 border rounded px-2 py-1 w-32" autocomplete="off">
+                    <div id="speaker-dropdown"
+                        class="absolute top-full left-0 mt-1 bg-white border rounded shadow-lg max-h-48 overflow-y-auto hidden z-50 w-48">
+                    </div>
+                </div>
+                <button onclick="clearSpeaker()" id="btn-clear-speaker"
+                    class="text-gray-500 hover:text-red-500 hidden">✕</button>
+
+                <div>
+                    <label class="text-gray-600">Chapter:</label>
+                    <input type="text" id="filter-chapter" placeholder="All" class="ml-1 border rounded px-2 py-1 w-24"
+                        onkeypress="if(event.key==='Enter')loadFiles()">
+                </div>
+            </div>
+
+            <!-- Merge Panel - добавить после Filters -->
+            <div id="merge-panel" class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 hidden">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-yellow-800">🔗 Merge Selected Files</h3>
+                    <button onclick="closeMergePanel()" class="text-yellow-600 hover:text-yellow-800">✕</button>
+                </div>
+
+                <div class="text-sm text-yellow-700 mb-2">
+                    Выбрано: <span id="merge-count">0</span> файлов |
+                    Спикер: <span id="merge-speaker">-</span> |
+                    Общая длительность: <span id="merge-duration">0</span>s
+                </div>
+
+                <!-- Список выбранных с возможностью менять порядок -->
+                <div id="merge-list" class="bg-white rounded border p-2 mb-3 max-h-48 overflow-y-auto">
+                    <!-- Файлы будут тут -->
+                </div>
+
+                <div class="flex gap-2">
+                    <button onclick="executeMerge()"
+                        class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                        ✓ Merge
+                    </button>
+                    <button onclick="clearMergeSelection()"
+                        class="bg-gray-400 text-white px-3 py-2 rounded hover:bg-gray-500">
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            <!-- Merge Queue Section -->
+            <div class="bg-white rounded-lg shadow-md p-4 mb-4">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-lg font-bold text-gray-800">🔗 Merge Queue</h3>
+                    <div class="flex gap-2">
+                        <button onclick="refreshMergeQueue()" class="text-gray-500 hover:text-gray-700 text-sm">↻
+                            Refresh</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <!-- Input Section -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                            Enter IDs to merge (one per line):
+                        </label>
+                        <textarea id="merge-input" rows="8"
+                            class="w-full border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="462743|462714
+            463174|462973
+            462885|462974
+            463057|463040
+            462754|462919|462999|462748"></textarea>
+
+                        <div class="flex gap-2 mt-2">
+                            <button onclick="addToMergeQueue()"
+                                class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">
+                                ➕ Add to Queue
+                            </button>
+                            <button onclick="startMergeQueue()"
+                                class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 text-sm">
+                                ▶ Start
+                            </button>
+                            <button onclick="stopMergeQueue()"
+                                class="bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600 text-sm">
+                                ⏹ Stop
+                            </button>
+                        </div>
+
+                        <div id="merge-result" class="mt-3"></div>
+                    </div>
+
+                    <!-- Status & Queue Section -->
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm font-medium text-gray-700">Queue Status:</span>
+                            <span id="merge-status-badge"
+                                class="px-2 py-1 rounded text-xs font-semibold bg-gray-200 text-gray-700">Idle</span>
+                        </div>
+
+                        <div id="merge-status" class="bg-gray-50 rounded p-2 mb-3 text-sm">
+                            <span class="text-gray-500">Click "Refresh" to see status</span>
+                        </div>
+
+                        <div class="text-sm font-medium text-gray-700 mb-1">Recent Queue Items:</div>
+                        <div id="merge-queue-list" class="border rounded max-h-64 overflow-y-auto">
+                            <div class="p-3 text-gray-500 text-sm">No items</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Sort Controls -->
+        <div class="bg-white rounded-lg shadow-md p-3 mb-3">
+            <div class="flex flex-wrap items-center gap-2 text-sm">
+                <span class="text-gray-600 font-semibold">Sort by:</span>
+
+                <button onclick="sortFiles('id')" class="sort-btn px-3 py-1 rounded text-sm bg-blue-500 text-white"
+                    data-field="id" data-label="ID">ID ↓</button>
+
+                <button onclick="sortFiles('duration_sec')" class="sort-btn px-3 py-1 rounded text-sm bg-gray-200"
+                    data-field="duration_sec" data-label="Duration">Duration</button>
+
+                <button onclick="sortFiles('wer')" class="sort-btn px-3 py-1 rounded text-sm bg-gray-200"
+                    data-field="wer" data-label="WER">WER</button>
+
+                <button onclick="sortFiles('wer_nolm')" class="sort-btn px-3 py-1 rounded text-sm bg-gray-200"
+                    data-field="wer_nolm" data-label="WER NoLM">WER NoLM</button>
+
+                <button onclick="sortFiles('wer_whisper_local')" class="sort-btn px-3 py-1 rounded text-sm bg-gray-200"
+                    data-field="wer_whisper_local" data-label="WER W.L">WER W.L</button>
+
+                <button onclick="sortFiles('snr_db')" class="sort-btn px-3 py-1 rounded text-sm bg-gray-200"
+                    data-field="snr_db" data-label="SNR">SNR</button>
+
+                <button onclick="sortFiles('transcription_original')"
+                    class="sort-btn px-3 py-1 rounded text-sm bg-gray-200" data-field="transcription_original"
+                    data-label="Text">Text</button>
+
+                <span class="text-gray-400 mx-2">|</span>
+
+                <button onclick="sortFiles('user_id')" class="sort-btn px-3 py-1 rounded text-sm bg-gray-200"
+                    data-field="user_id" data-label="Speaker">Speaker</button>
+
+                <button onclick="sortFiles('chapter_id')" class="sort-btn px-3 py-1 rounded text-sm bg-gray-200"
+                    data-field="chapter_id" data-label="Chapter">Chapter</button>
+            </div>
+        </div>
+
+        <!-- Pagination Top -->
+        <div class="mb-3 flex justify-center items-center gap-1 text-sm">
+            <button onclick="firstPage()" id="btn-first-top"
+                class="bg-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-400 disabled:opacity-50">⏮
+                First</button>
+            <button onclick="prevPage()" id="btn-prev-top"
+                class="bg-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-400 disabled:opacity-50">←
+                Prev</button>
+            <span class="px-3 py-1 text-gray-600">
+                Page <span id="current-page-top">1</span> / <span id="total-pages-top">1</span>
+                <span class="ml-2 font-semibold text-blue-600">(Total: <span id="filter-total-top">0</span>)</span>
+            </span>
+            <button onclick="nextPage()" id="btn-next-top"
+                class="bg-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-400 disabled:opacity-50">Next
+                →</button>
+            <button onclick="lastPage()" id="btn-last-top"
+                class="bg-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-400 disabled:opacity-50">Last
+                ⏭</button>
+        </div>
+
+        <!-- File List - 2 columns -->
+        <div id="file-list" class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <!-- Files will be loaded here -->
+        </div>
+
+        <!-- Pagination Bottom -->
+        <div class="mt-4 flex justify-center items-center gap-1 text-sm">
+            <button onclick="firstPage()" id="btn-first"
+                class="bg-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-400 disabled:opacity-50">⏮
+                First</button>
+            <button onclick="prevPage()" id="btn-prev"
+                class="bg-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-400 disabled:opacity-50">←
+                Prev</button>
+            <span class="px-3 py-1 text-gray-600">
+                Page <span id="current-page">1</span> / <span id="total-pages">1</span>
+                <span class="ml-2 font-semibold text-blue-600">(Total: <span id="filter-total">0</span>)</span>
+            </span>
+            <button onclick="nextPage()" id="btn-next"
+                class="bg-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-400 disabled:opacity-50">Next
+                →</button>
+            <button onclick="lastPage()" id="btn-last"
+                class="bg-gray-300 text-gray-700 px-2 py-1 rounded hover:bg-gray-400 disabled:opacity-50">Last
+                ⏭</button>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-gray-800">File Details</h2>
+                    <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                </div>
+                <div id="modal-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/merge.js"></script>
+    <script src="/static/js/segment.js"></script>
+</body>
+
+</html>
