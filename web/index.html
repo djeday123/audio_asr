@@ -392,10 +392,7 @@
                         <textarea id="merge-input" rows="8"
                             class="w-full border rounded-lg px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             placeholder="462743|462714
-            463174|462973
-            462885|462974
-            463057|463040
-            462754|462919|462999|462748"></textarea>
+462754|462919|462999|462748"></textarea>
 
                         <div class="flex gap-2 mt-2">
                             <button onclick="addToMergeQueue()"
@@ -409,6 +406,10 @@
                             <button onclick="stopMergeQueue()"
                                 class="bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600 text-sm">
                                 ⏹ Stop
+                            </button>
+                            <button onclick="clearMergeQueue('pending')"
+                                class="bg-gray-400 text-white px-3 py-2 rounded hover:bg-gray-500 text-sm">
+                                🗑 Clear Pending
                             </button>
                         </div>
 
@@ -534,8 +535,21 @@
     </div>
 
     <script src="/static/js/app.js"></script>
+    <script src="/static/js/file.js"></script>
     <script src="/static/js/merge.js"></script>
     <script src="/static/js/segment.js"></script>
+
+    <script>
+
+        // ============================================================
+        // INITIAL LOAD
+        // ============================================================
+        // Initial load после всех скриптов
+        loadSpeakers();
+        loadStats();
+        loadFiles();
+        setInterval(loadStats, 30000);
+    </script>
 </body>
 
 </html>

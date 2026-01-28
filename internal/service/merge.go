@@ -56,7 +56,7 @@ type MergeQueueStatus struct {
 	Elapsed   string `json:"elapsed"`
 }
 
-// MergeFiles - существующий метод (оставляем для совместимости)
+// MergeFiles - существующий метод
 func (s *MergeService) MergeFiles(ids []int64, outputDir string) (*MergeResult, error) {
 	if len(ids) < 2 {
 		return nil, fmt.Errorf("need at least 2 files to merge")
@@ -66,24 +66,24 @@ func (s *MergeService) MergeFiles(ids []int64, outputDir string) (*MergeResult, 
 		outputDir = s.outputDir
 	}
 
-	// Получаем все файлы
+	// Проверяем файлы (игнорируем warnings)
+	_, _, err := s.db.CheckFilesForMerge(ids)
+	if err != nil {
+		return nil, err
+	}
+
+	// Получаем все файлы (включая неактивные)
 	files := make([]*db.AudioFile, 0, len(ids))
 	var speakerID string
 
 	for _, id := range ids {
-		file, err := s.db.GetFile(id)
+		file, err := s.db.GetFileIncludingInactive(id) // <-- новый метод
 		if err != nil {
 			return nil, fmt.Errorf("file %d not found: %w", id, err)
 		}
 
 		if speakerID == "" {
 			speakerID = file.UserID
-		} else if file.UserID != speakerID {
-			return nil, fmt.Errorf("all files must be from same speaker")
-		}
-
-		if file.ASRStatus == "processed" && file.WER > 0.001 {
-			return nil, fmt.Errorf("file %d has WER %.2f%% (must be 0%%)", id, file.WER*100)
 		}
 
 		files = append(files, file)
@@ -293,7 +293,7 @@ func (s *MergeService) processQueueItem(item db.MergeQueueItem) {
 	}
 
 	// Проверяем файлы
-	_, err = s.db.CheckFilesForMerge(ids)
+	_, _, err = s.db.CheckFilesForMerge(ids)
 	if err != nil {
 		s.db.UpdateMergeQueueError(item.ID, err.Error())
 		atomic.AddInt64(&s.errors, 1)
@@ -323,7 +323,7 @@ func (s *MergeService) AddToQueue(idsString string) (int64, error) {
 		return 0, err
 	}
 
-	_, err = s.db.CheckFilesForMerge(ids)
+	_, _, err = s.db.CheckFilesForMerge(ids)
 	if err != nil {
 		return 0, err
 	}

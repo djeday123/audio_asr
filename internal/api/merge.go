@@ -203,3 +203,42 @@ func (h *Handlers) AddBatchToMergeQueue(w http.ResponseWriter, r *http.Request) 
 		"errors":  errors,
 	})
 }
+
+// DeleteMergeQueueItem - DELETE /api/merge/queue/{id}
+func (h *Handlers) DeleteMergeQueueItem(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		h.error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	err = h.db.DeleteMergeQueueItem(id)
+	if err != nil {
+		h.error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.success(w, map[string]interface{}{
+		"deleted": id,
+	})
+}
+
+// ClearMergeQueue - DELETE /api/merge/queue/clear
+func (h *Handlers) ClearMergeQueue(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status") // pending, error, completed, all
+	if status == "" {
+		status = "pending"
+	}
+
+	count, err := h.db.ClearMergeQueue(status)
+	if err != nil {
+		h.error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.success(w, map[string]interface{}{
+		"cleared": count,
+		"status":  status,
+	})
+}

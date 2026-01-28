@@ -40,6 +40,12 @@ async function addToMergeQueue() {
                     }
                     
                     let detail = r.error || r.reason || `queue_id: ${r.queue_id}`;
+                    
+                    // Показываем warnings
+                    if (r.warnings && r.warnings.length > 0) {
+                        detail += ` <span class="text-orange-500">(⚠ ${r.warnings.join(', ')})</span>`;
+                    }
+                    
                     html += `<li class="${cls}">${icon} <code>${r.ids}</code> — ${detail}</li>`;
                 }
                 html += '</ul>';
@@ -171,10 +177,14 @@ async function refreshMergeQueue() {
                     }
                     
                     return `
-                        <div class="border-b last:border-0 px-3 py-2">
+                        <div class="border-b last:border-0 px-3 py-2 hover:bg-gray-50">
                             <div class="flex justify-between items-center">
                                 <code class="text-xs text-gray-700">${item.ids_string}</code>
-                                <span class="px-2 py-0.5 rounded text-xs ${badgeClass}">${badgeText}</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-0.5 rounded text-xs ${badgeClass}">${badgeText}</span>
+                                    <button onclick="deleteMergeQueueItem(${item.id})" 
+                                        class="text-gray-400 hover:text-red-500 text-sm" title="Delete">✕</button>
+                                </div>
                             </div>
                             ${detail ? `<div class="mt-1 text-sm">${detail}</div>` : ''}
                         </div>
@@ -252,133 +262,167 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-        // ============================================================
-        // MERGE FUNCTIONALITY
-        // ============================================================
+// ============================================================
+// MERGE FUNCTIONALITY
+// ============================================================
 
-        let selectedForMerge = []; // [{id, speaker, duration, transcription}, ...]
+let selectedForMerge = []; // [{id, speaker, duration, transcription}, ...]
 
-        function toggleMergeSelect(fileId, speaker, duration, transcription) {
-            const idx = selectedForMerge.findIndex(f => f.id === fileId);
+function toggleMergeSelect(fileId, speaker, duration, transcription) {
+    const idx = selectedForMerge.findIndex(f => f.id === fileId);
 
-            if (idx >= 0) {
-                // Убираем из выбранных
-                selectedForMerge.splice(idx, 1);
-            } else {
-                // Проверяем спикера
-                if (selectedForMerge.length > 0 && selectedForMerge[0].speaker !== speaker) {
-                    alert('Все файлы должны быть от одного спикера!');
-                    return;
-                }
-                // Добавляем
-                selectedForMerge.push({ id: fileId, speaker, duration, transcription });
-            }
-
-            updateMergePanel();
-            updateCheckboxes();
+    if (idx >= 0) {
+        // Убираем из выбранных
+        selectedForMerge.splice(idx, 1);
+    } else {
+        // Проверяем спикера
+        if (selectedForMerge.length > 0 && selectedForMerge[0].speaker !== speaker) {
+            alert('Все файлы должны быть от одного спикера!');
+            return;
         }
+        // Добавляем
+        selectedForMerge.push({ id: fileId, speaker, duration, transcription });
+    }
 
-        function updateMergePanel() {
-            const panel = document.getElementById('merge-panel');
-            const list = document.getElementById('merge-list');
+    updateMergePanel();
+    updateCheckboxes();
+}
 
-            if (selectedForMerge.length === 0) {
-                panel.classList.add('hidden');
-                return;
-            }
+function updateMergePanel() {
+    const panel = document.getElementById('merge-panel');
+    const list = document.getElementById('merge-list');
 
-            panel.classList.remove('hidden');
+    if (selectedForMerge.length === 0) {
+        panel.classList.add('hidden');
+        return;
+    }
 
-            document.getElementById('merge-count').textContent = selectedForMerge.length;
-            document.getElementById('merge-speaker').textContent = selectedForMerge[0]?.speaker || '-';
+    panel.classList.remove('hidden');
 
-            const totalDur = selectedForMerge.reduce((sum, f) => sum + f.duration, 0);
-            document.getElementById('merge-duration').textContent = totalDur.toFixed(2);
+    document.getElementById('merge-count').textContent = selectedForMerge.length;
+    document.getElementById('merge-speaker').textContent = selectedForMerge[0]?.speaker || '-';
 
-            // Рендерим список с кнопками перемещения
-            list.innerHTML = selectedForMerge.map((f, idx) => `
-                <div class="flex items-center gap-2 p-2 border-b last:border-0 hover:bg-gray-50">
-                    <span class="text-gray-400 w-6">${idx + 1}.</span>
-                    <div class="flex-1">
-                        <span class="font-mono text-sm">#${f.id}</span>
-                        <span class="text-gray-500 text-xs ml-2">${f.duration.toFixed(2)}s</span>
-                        <div class="text-xs text-gray-600 truncate max-w-md">${f.transcription || '-'}</div>
-                    </div>
-                    <div class="flex gap-1">
-                        <button onclick="moveMergeItem(${idx}, -1)" 
-                            class="text-gray-400 hover:text-blue-500 ${idx === 0 ? 'invisible' : ''}"
-                            title="Move up">↑</button>
-                        <button onclick="moveMergeItem(${idx}, 1)" 
-                            class="text-gray-400 hover:text-blue-500 ${idx === selectedForMerge.length - 1 ? 'invisible' : ''}"
-                            title="Move down">↓</button>
-                        <button onclick="removeMergeItem(${idx})" 
-                            class="text-gray-400 hover:text-red-500"
-                            title="Remove">✕</button>
-                    </div>
-                </div>
-            `).join('');
+    const totalDur = selectedForMerge.reduce((sum, f) => sum + f.duration, 0);
+    document.getElementById('merge-duration').textContent = totalDur.toFixed(2);
+
+    // Рендерим список с кнопками перемещения
+    list.innerHTML = selectedForMerge.map((f, idx) => `
+        <div class="flex items-center gap-2 p-2 border-b last:border-0 hover:bg-gray-50">
+            <span class="text-gray-400 w-6">${idx + 1}.</span>
+            <div class="flex-1">
+                <span class="font-mono text-sm">#${f.id}</span>
+                <span class="text-gray-500 text-xs ml-2">${f.duration.toFixed(2)}s</span>
+                <div class="text-xs text-gray-600 truncate max-w-md">${f.transcription || '-'}</div>
+            </div>
+            <div class="flex gap-1">
+                <button onclick="moveMergeItem(${idx}, -1)" 
+                    class="text-gray-400 hover:text-blue-500 ${idx === 0 ? 'invisible' : ''}"
+                    title="Move up">↑</button>
+                <button onclick="moveMergeItem(${idx}, 1)" 
+                    class="text-gray-400 hover:text-blue-500 ${idx === selectedForMerge.length - 1 ? 'invisible' : ''}"
+                    title="Move down">↓</button>
+                <button onclick="removeMergeItem(${idx})" 
+                    class="text-gray-400 hover:text-red-500"
+                    title="Remove">✕</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function moveMergeItem(idx, direction) {
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= selectedForMerge.length) return;
+
+    // Swap
+    [selectedForMerge[idx], selectedForMerge[newIdx]] =
+        [selectedForMerge[newIdx], selectedForMerge[idx]];
+
+    updateMergePanel();
+}
+
+function removeMergeItem(idx) {
+    selectedForMerge.splice(idx, 1);
+    updateMergePanel();
+    updateCheckboxes();
+}
+
+function clearMergeSelection() {
+    selectedForMerge = [];
+    updateMergePanel();
+    updateCheckboxes();
+}
+
+function closeMergePanel() {
+    document.getElementById('merge-panel').classList.add('hidden');
+}
+
+function updateCheckboxes() {
+    document.querySelectorAll('.merge-checkbox').forEach(cb => {
+        const fileId = parseInt(cb.dataset.fileId);
+        cb.checked = selectedForMerge.some(f => f.id === fileId);
+    });
+}
+
+async function executeMerge() {
+    if (selectedForMerge.length < 2) {
+        alert('Выберите минимум 2 файла');
+        return;
+    }
+
+    const ids = selectedForMerge.map(f => f.id);
+
+    try {
+        const res = await fetch('/api/merge', {  // <-- убрал API_BASE
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            alert(`Merged! New file ID: ${data.data.new_id}\nPath: ${data.data.output_path}`);
+            clearMergeSelection();
+            loadFiles();
+            loadStats();
+        } else {
+            alert(`Error: ${data.error}`);
         }
+    } catch (e) {
+        alert(`Error: ${e.message}`);
+    }
+}
 
-        function moveMergeItem(idx, direction) {
-            const newIdx = idx + direction;
-            if (newIdx < 0 || newIdx >= selectedForMerge.length) return;
-
-            // Swap
-            [selectedForMerge[idx], selectedForMerge[newIdx]] =
-                [selectedForMerge[newIdx], selectedForMerge[idx]];
-
-            updateMergePanel();
+// Удалить один item
+async function deleteMergeQueueItem(id) {
+    try {
+        const resp = await fetch(`/api/merge/queue/${id}`, {method: 'DELETE'});
+        const data = await resp.json();
+        if (data.success) {
+            refreshMergeQueue();
+        } else {
+            alert('Error: ' + data.error);
         }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
 
-        function removeMergeItem(idx) {
-            selectedForMerge.splice(idx, 1);
-            updateMergePanel();
-            updateCheckboxes();
+// Очистить очередь
+async function clearMergeQueue(status = 'pending') {
+    const statusText = status === 'all' ? 'ALL items' : `${status} items`;
+    if (!confirm(`Clear ${statusText} from queue?`)) return;
+    
+    try {
+        const resp = await fetch(`/api/merge/queue/clear?status=${status}`, {method: 'DELETE'});
+        const data = await resp.json();
+        if (data.success) {
+            showMergeResult(`Cleared ${data.data.cleared} items`, 'success');
+            refreshMergeQueue();
+        } else {
+            showMergeResult('Error: ' + data.error, 'error');
         }
-
-        function clearMergeSelection() {
-            selectedForMerge = [];
-            updateMergePanel();
-            updateCheckboxes();
-        }
-
-        function closeMergePanel() {
-            document.getElementById('merge-panel').classList.add('hidden');
-        }
-
-        function updateCheckboxes() {
-            document.querySelectorAll('.merge-checkbox').forEach(cb => {
-                const fileId = parseInt(cb.dataset.fileId);
-                cb.checked = selectedForMerge.some(f => f.id === fileId);
-            });
-        }
-
-        async function executeMerge() {
-            if (selectedForMerge.length < 2) {
-                alert('Выберите минимум 2 файла');
-                return;
-            }
-
-            const ids = selectedForMerge.map(f => f.id);
-
-            try {
-                const res = await fetch(`${API_BASE}/api/merge`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ids })
-                });
-
-                const data = await res.json();
-
-                if (data.success) {
-                    alert(`Merged! New file ID: ${data.data.new_id}\nPath: ${data.data.output_path}`);
-                    clearMergeSelection();
-                    loadFiles();
-                    loadStats();
-                } else {
-                    alert(`Error: ${data.error}`);
-                }
-            } catch (e) {
-                alert(`Error: ${e.message}`);
-            }
-        }
+    } catch (e) {
+        showMergeResult('Error: ' + e.message, 'error');
+    }
+}

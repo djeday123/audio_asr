@@ -198,6 +198,8 @@ func (r *Router) setupRoutes() {
 	r.mux.HandleFunc("POST /api/merge/queue/stop", r.handlers.StopMergeQueue)
 	r.mux.HandleFunc("GET /api/merge/queue", r.handlers.ListMergeQueue)
 	r.mux.HandleFunc("POST /api/merge/queue/batch", r.handlers.AddBatchToMergeQueue)
+	r.mux.HandleFunc("DELETE /api/merge/queue/clear", r.handlers.ClearMergeQueue)
+	r.mux.HandleFunc("DELETE /api/merge/queue/{id}", r.handlers.DeleteMergeQueueItem)
 
 	r.mux.HandleFunc("POST /api/analyze/start", r.handlers.AnalyzeStart)
 	r.mux.HandleFunc("GET /api/analyze/status", r.handlers.AnalyzeStatus)
